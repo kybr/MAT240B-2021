@@ -58,6 +58,21 @@ struct MyApp : App {
     // Draw th GUI
     gui.draw(g);
   }
+
+  bool onMouseScroll(Mouse const &mouse) override {
+    printf("%lf, %lf (scroll)\n", mouse.scrollX(), mouse.scrollY());
+    return true;
+  }
+
+  bool onMouseMove(Mouse const &mouse) override {
+    printf("%d, %d (move)\n", mouse.x(), mouse.y());
+    return true;
+  }
+
+  bool onMouseDrag(Mouse const &mouse) override {
+    printf("%d, %d (drag)\n", mouse.x(), mouse.y());
+    return true;
+  }
 };
 
 int main(int argc, char *argv[]) {

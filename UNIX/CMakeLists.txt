@@ -13,6 +13,7 @@ add_executable(reverse reverse.cpp)
 add_executable(cumulative-sum cumulative-sum.cpp)
 add_executable(difference difference.cpp)
 add_executable(sine sine.cpp)
+add_executable(sine-sweep sine-sweep.cpp)
 
 add_executable(triangle triangle.cpp)
 add_executable(impulse-sweep impulse-sweep.cpp)
