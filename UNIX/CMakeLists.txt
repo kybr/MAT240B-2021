@@ -15,6 +15,7 @@ add_executable(difference difference.cpp)
 add_executable(sine sine.cpp)
 add_executable(sine-sweep sine-sweep.cpp)
 add_executable(granular-analysis granular-analysis.cpp)
+add_executable(stft-peaks stft-peaks.cpp)
 
 add_executable(triangle triangle.cpp)
 add_executable(impulse-sweep impulse-sweep.cpp)
