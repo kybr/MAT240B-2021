@@ -1,7 +1,9 @@
-#include "al/core.hpp"
-#include "al/util/ui/al_ControlGUI.hpp"
-#include "al/util/ui/al_Parameter.hpp"
-#include "al/util/ui/al_Preset.hpp"
+#include "al/app/al_App.hpp"
+#include "al/math/al_Random.hpp"
+#include "al/ui/al_ControlGUI.hpp"
+#include "al/ui/al_Parameter.hpp"
+#include "al/ui/al_PresetHandler.hpp"
+#include "al/ui/al_PresetServer.hpp"
 using namespace al;
 
 #include "synths.h"
@@ -69,6 +71,6 @@ struct MyApp : App {
 
 int main() {
   MyApp app;
-  app.initAudio(SAMPLE_RATE, BLOCK_SIZE, OUTPUT_CHANNELS, INPUT_CHANNELS);
+  app.configureAudio(SAMPLE_RATE, BLOCK_SIZE, OUTPUT_CHANNELS, INPUT_CHANNELS);
   app.start();
 }

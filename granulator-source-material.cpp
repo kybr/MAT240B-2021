@@ -1,7 +1,8 @@
-#include "al/core.hpp"
-#include "al/util/ui/al_ControlGUI.hpp"
-#include "al/util/ui/al_Parameter.hpp"
-#include "al/util/ui/al_Preset.hpp"
+#include "al/app/al_App.hpp"
+#include "al/ui/al_ControlGUI.hpp"
+#include "al/ui/al_Parameter.hpp"
+#include "al/ui/al_PresetHandler.hpp"
+#include "al/ui/al_PresetServer.hpp"
 using namespace al;
 
 #include "synths.h"
@@ -18,7 +19,7 @@ using namespace std;
 // for deactivating completed grains.
 //
 template <typename T>
-class Bag {
+class GrainManager {
   forward_list<T*> remove, inactive;
   unordered_set<T*> active;
 
@@ -68,13 +69,9 @@ struct Granulator {
   // knows how to load a file into the granulator
   //
   void load(string fileName) {
-    SearchPaths searchPaths;
-    searchPaths.addSearchPath("..");
-
-    string filePath = searchPaths.find(fileName).filepath();
     arrayList.emplace_back();
-    if (arrayList.back().load(filePath)) {
-      printf("Loaded %s! at %08X with size %lu\n", filePath.c_str(),
+    if (arrayList.back().load(fileName)) {
+      printf("Loaded %s! at %08X with size %lu\n", fileName.c_str(),
              &arrayList.back(), arrayList.back().size());
     } else {
       exit(1);
@@ -95,7 +92,7 @@ struct Granulator {
   // we store a "pool" of grains which may or may not be active at any time
   //
   vector<Grain> grain;
-  Bag<Grain> bag;
+  GrainManager<Grain> manager;
 
   Granulator() {
     // rather than using new/delete and allocating memory on the fly, we just
@@ -105,7 +102,7 @@ struct Granulator {
     // and that will cause drop-outs and glitches.
     //
     grain.resize(1000);
-    for (auto& g : grain) bag.insert_inactive(g);
+    for (auto& g : grain) manager.insert_inactive(g);
   }
 
   // gui tweakable parameters
@@ -125,7 +122,7 @@ struct Granulator {
 
   // this method makes a new grain out of a dead / inactive one.
   //
-  void recycle(Grain& g) {
+  void reincarnate(Grain& g) {
     // choose which sound clip this grain pulls from
     g.source = &arrayList[whichClip];
 
@@ -147,23 +144,30 @@ struct Granulator {
   // make the next sample
   //
   diy::FloatPair operator()() {
-    // figure out if we should generate (recycle) more grains; then do so.
+    // figure out if we should generate (reincarnate) more grains; then do so.
     //
     grainBirth.frequency(birthRate);
-    if (grainBirth())
-      if (bag.has_inactive()) recycle(bag.get_next_inactive());
+    if (grainBirth()) {
+      // we want to birth a new grain
+      if (manager.has_inactive()) {
+        // we have a grain to reincarnate
+        reincarnate(manager.get_next_inactive());
+      }
+    }
 
     // figure out which grains are active. for each active grain, get the next
     // sample; sum all these up and return that sum.
     //
     float left = 0, right = 0;
-    bag.for_each_active([&](Grain& g) {
+    manager.for_each_active([&](Grain& g) {
       float f = g();
       left += f * (1 - g.pan);
       right += f * g.pan;
-      if (g.index.done()) bag.schedule_for_deactivation(g);
+      if (g.index.done()) {
+        manager.schedule_for_deactivation(g);
+      }
     });
-    bag.execute_deactivation();
+    manager.execute_deactivation();
 
     return {left, right};
   }
@@ -238,6 +242,6 @@ struct MyApp : App {
 
 int main() {
   MyApp app;
-  app.initAudio(SAMPLE_RATE, BLOCK_SIZE, OUTPUT_CHANNELS, INPUT_CHANNELS);
+  app.configureAudio(SAMPLE_RATE, BLOCK_SIZE, OUTPUT_CHANNELS, INPUT_CHANNELS);
   app.start();
 }

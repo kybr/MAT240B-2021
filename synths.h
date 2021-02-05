@@ -14,7 +14,8 @@
 #define DR_WAV_IMPLEMENTATION
 #include "dr_wav.h"
 
-#include "al/core/math/al_Random.hpp"  // rnd::uniform()
+//
+#include "al/math/al_Random.hpp"  // rnd::uniform()
 
 namespace diy {
 
@@ -936,4 +937,4 @@ struct Rect : QuasiBandlimited {
 };
 
 }  // namespace diy
-//#endif  // __240C_SYNTHS__
+   //#endif  // __240C_SYNTHS__
