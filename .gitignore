@@ -1,2 +1,4 @@
 bin/*
 build/
+scrub-corpus-using-gist/bin/
+use-mlpack/bin/

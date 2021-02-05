@@ -1,0 +1,3 @@
+[submodule "scrub-corpus-using-gist/Gist"]
+	path = scrub-corpus-using-gist/Gist
+	url = https://github.com/adamstark/Gist

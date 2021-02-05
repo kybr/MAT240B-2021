@@ -18,7 +18,7 @@ set(app_include_dirs Gist/src)
 set(app_link_libs libgist.a)
 
 # definitions. Prepend -D to any defines
-set(app_definitions)
+set(app_definitions -DUSE_ACCELERATE_FFT)
 
 # compile flags
 # This flag ignores unused variable warning. You probably don't want to do this...
