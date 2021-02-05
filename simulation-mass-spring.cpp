@@ -1,7 +1,7 @@
 #include "Gamma/SoundFile.h"
 using namespace gam;
 
-#include "al/core.hpp"
+#include "al/app/al_App.hpp"
 using namespace al;
 
 #include "synths.h"
@@ -115,17 +115,20 @@ struct MyApp : App {
       b.velocity += c.te() / 20;
       c.velocity += a.te() / 20;
       float f = a() * (b() + c());
-      f = sigmoid_bipolar(f / 3);
+      f = sigmoid(f / 3);
       recording(f);
       io.out(0) = f;
       io.out(1) = f;
     }
   }
-  void onKeyDown(const Keyboard&) override { recording.save("wtf.wav"); }
+  bool onKeyDown(const Keyboard&) override {
+    recording.save("wtf.wav");
+    return true;
+  }
 };
 
 int main() {
   MyApp app;
-  app.initAudio(SAMPLE_RATE, BLOCK_SIZE, OUTPUT_CHANNELS, INPUT_CHANNELS);
+  app.configureAudio(SAMPLE_RATE, BLOCK_SIZE, OUTPUT_CHANNELS, INPUT_CHANNELS);
   app.start();
 }

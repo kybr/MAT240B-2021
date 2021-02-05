@@ -1,10 +1,10 @@
 #include "Gamma/SoundFile.h"
 using namespace gam;
 
-#include "al/core.hpp"
+#include "al/app/al_App.hpp"
 using namespace al;
 
-#include "synths.h"
+#include "synths.h"  // PluckedString, Edge
 using namespace diy;
 
 struct MyApp : App {
@@ -36,14 +36,14 @@ struct MyApp : App {
     }
   }
 
-  void onKeyDown(const Keyboard& k) override {
+  bool onKeyDown(const Keyboard& k) override {
     recording.save("karplus-strong-recording.wav");
-    //
+    return true;
   }
 };
 
 int main() {
   MyApp app;
-  app.initAudio(SAMPLE_RATE, BLOCK_SIZE, OUTPUT_CHANNELS, INPUT_CHANNELS);
+  app.configureAudio(SAMPLE_RATE, BLOCK_SIZE, OUTPUT_CHANNELS, INPUT_CHANNELS);
   app.start();
 }

@@ -8,7 +8,7 @@ using namespace al;
 
 #include <limits>
 
-#include "functions.h"
+#include "synths.h"
 
 gam::STFT stft(4096, 4096 / 4, 16384, gam::HAMMING);
 gam::SamplePlayer<float, gam::ipl::Cubic, gam::phsInc::Loop> player;
@@ -35,7 +35,10 @@ struct MyApp : App {
     rateFilter.freq(25);
 
     gam::sampleRate(audioIO().framesPerSecond());
-    player.load("../BBQ.wav");
+    if (!player.load("Guitar-Tuner-Example.wav")) {
+      printf("could not load .wav");
+      exit(1);
+    }
 
     for (int i = 0; i < stft.numBins(); i++) {
       spectrum.vertex(2.0 * i / stft.numBins() - 1);
@@ -87,6 +90,7 @@ struct MyApp : App {
   bool onKeyDown(const Keyboard& k) override {
     minimum = std::numeric_limits<float>::max();
     maximum = -std::numeric_limits<float>::max();
+    return true;
   }
 
   void onDraw(Graphics& g) override {
