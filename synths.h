@@ -23,7 +23,7 @@ namespace diy {
 // xx GLOBALS
 // xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-const int SAMPLE_RATE = 44100;
+const int SAMPLE_RATE = 48000;  // 44100;
 const int BLOCK_SIZE = 512;
 const int OUTPUT_CHANNELS = 2;
 const int INPUT_CHANNELS = 2;
@@ -270,6 +270,9 @@ struct Array : std::vector<float> {
   }
   void save(const std::string& fileName) const { save(fileName.c_str()); }
   void save(const char* fileName) const {
+    std::cerr << "FIXME" << std::endl;
+    exit(1);
+    /*
     drwav_data_format format;
     format.channels = 1;
     format.container = drwav_container_riff;
@@ -289,35 +292,38 @@ struct Array : std::vector<float> {
       return;
     }
     drwav_close(pWav);
+    */
   }
 
   bool load(const std::string& fileName) { return load(fileName.c_str()); }
-  bool load(const char* fileName) {
-    drwav* pWav = drwav_open_file(fileName);
-    if (pWav == nullptr) return false;
 
-    sampleRate = pWav->sampleRate;
-
-    if (pWav->channels == 1) {
-      resize(pWav->totalPCMFrameCount);
-      drwav_read_f32(pWav, size(), data());  // XXX does fail?
-      drwav_close(pWav);
-      return true;
+  bool load(const char* filePath) {
+    unsigned int channels;
+    unsigned int sampleRate;
+    drwav_uint64 totalPCMFrameCount;
+    float* pSampleData = drwav_open_file_and_read_pcm_frames_f32(
+        filePath, &channels, &sampleRate, &totalPCMFrameCount, NULL);
+    if (pSampleData == NULL) {
+      printf("failed to load %s\n", filePath);
+      return false;
     }
 
-    if (pWav->channels > 1) {
-      float* pSampleData = (float*)malloc((size_t)pWav->totalPCMFrameCount *
-                                          pWav->channels * sizeof(float));
-      drwav_read_f32(pWav, pWav->totalPCMFrameCount, pSampleData);
-      drwav_close(pWav);
-
-      resize(pWav->totalPCMFrameCount);
-      for (unsigned i = 0; i < size(); ++i)
-        at(i) = pSampleData[pWav->channels * i];  // only read the first channel
-      return true;
+    //
+    if (channels == 1)
+      for (int i = 0; i < totalPCMFrameCount; i++) {
+        push_back(pSampleData[i]);
+      }
+    else if (channels == 2) {
+      for (int i = 0; i < totalPCMFrameCount; i++) {
+        push_back((pSampleData[2 * i] + pSampleData[2 * i + 1]) / 2);
+      }
+    } else {
+      printf("can't handle %d channels\n", channels);
+      return false;
     }
 
-    return false;
+    drwav_free(pSampleData, NULL);
+    return true;
   }
 
   // raw lookup
@@ -362,6 +368,7 @@ struct FloatPair {
   }
 };
 
+/*
 struct StereoArray : std::vector<FloatPair> {
   void save(const char* fileName) const {
     drwav_data_format format;
@@ -418,6 +425,7 @@ struct StereoArray : std::vector<FloatPair> {
     //
   }
 };
+*/
 
 float sine(float phase) {
   struct SineArray : Array {

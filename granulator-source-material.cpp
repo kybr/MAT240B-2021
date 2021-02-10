@@ -24,6 +24,8 @@ class GrainManager {
   unordered_set<T*> active;
 
  public:
+  int activeGrainCount() { return active.size(); }
+
   // add a grain to the container with "inactive" status.
   //
   void insert_inactive(T& t) { inactive.push_front(&t); }
@@ -62,6 +64,37 @@ class GrainManager {
     remove.clear();
   }
 };
+
+const char* show_classification(float x) {
+  switch (std::fpclassify(x)) {
+    case FP_INFINITE:
+      return "Inf";
+    case FP_NAN:
+      return "NaN";
+    case FP_NORMAL:
+      return "normal";
+    case FP_SUBNORMAL:
+      return "subnormal";
+    case FP_ZERO:
+      return "zero";
+    default:
+      return "unknown";
+  }
+}
+
+bool bad(float x) {
+  switch (std::fpclassify(x)) {
+    case FP_INFINITE:
+    case FP_NAN:
+    case FP_SUBNORMAL:
+      return true;
+
+    case FP_ZERO:
+    case FP_NORMAL:
+    default:
+      return false;
+  }
+}
 
 struct Granulator {
   vector<diy::Array> arrayList;
@@ -114,7 +147,7 @@ struct Granulator {
   Parameter amplitudePeak{"/amplitude", "", 0.707, "", 0.0, 1.0};
   Parameter panPosition{"/pan", "", 0.5, "", 0.0, 1.0};
   Parameter playbackRate{"/playback", "", 0.0, "", -1.0, 1.0};
-  Parameter birthRate{"/frequency", "", 55, "", 0, 200};
+  Parameter birthRate{"/frequency", "", 55, "", 0, 1000};
 
   // this oscillator governs the rate at which grains are created
   //
@@ -174,12 +207,18 @@ struct Granulator {
 };
 
 struct MyApp : App {
+  MyApp() {
+    // this is called from the main thread
+  }
+
   float background = 0.21;
 
   Granulator granulator;
   ControlGUI gui;
   PresetHandler presetHandler{"GranulatorPresets"};
   PresetServer presetServer{"0.0.0.0", 9011};
+  ParameterInt active{"/active", "", 0, "", 0, 1000};
+  Parameter value{"/value", "", 0, "", -1, 1};
 
   void onCreate() override {
     // load sound files into the
@@ -205,7 +244,7 @@ struct MyApp : App {
         << granulator.whichClip << granulator.grainDuration
         << granulator.startPosition << granulator.peakPosition
         << granulator.amplitudePeak << granulator.panPosition
-        << granulator.playbackRate << granulator.birthRate;
+        << granulator.playbackRate << granulator.birthRate << active << value;
 
     presetHandler << granulator.whichClip << granulator.grainDuration
                   << granulator.startPosition << granulator.peakPosition
@@ -232,8 +271,21 @@ struct MyApp : App {
   }
 
   void onSound(AudioIOData& io) override {
+    active.set(granulator.manager.activeGrainCount());
+
     while (io()) {
       diy::FloatPair p = granulator();
+
+      if (bad(p.left)) {
+        printf("p.left is %s\n", show_classification(p.left));
+      }
+
+      if (bad(p.right)) {
+        printf("p.right is %s\n", show_classification(p.right));
+      }
+
+      value.set(p.left);
+
       io.out(0) = p.left;
       io.out(1) = p.right;
     }
@@ -242,6 +294,6 @@ struct MyApp : App {
 
 int main() {
   MyApp app;
-  app.configureAudio(SAMPLE_RATE, BLOCK_SIZE, OUTPUT_CHANNELS, INPUT_CHANNELS);
+  app.configureAudio(SAMPLE_RATE, BLOCK_SIZE, OUTPUT_CHANNELS);
   app.start();
 }
