@@ -31,6 +31,7 @@ struct System {
   void drive(float position_of_other_spring) {
     //
   }
+
   // "kick" the mass-spring system such that we get a nice (-1, 1) oscillation.
   //
   void trigger() {

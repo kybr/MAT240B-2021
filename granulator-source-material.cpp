@@ -221,6 +221,8 @@ struct MyApp : App {
   Parameter value{"/value", "", 0, "", -1, 1};
 
   void onCreate() override {
+    audioIO().print();
+
     // load sound files into the
     granulator.load("0.wav");
     granulator.load("1.wav");
