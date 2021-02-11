@@ -1,6 +1,8 @@
 #include "al/app/al_App.hpp"
 #include "al/ui/al_ControlGUI.hpp"
 #include "al/ui/al_Parameter.hpp"
+#include "al/ui/al_PresetHandler.hpp"
+#include "al/ui/al_PresetServer.hpp"
 
 using namespace al;
 
@@ -146,16 +148,39 @@ struct MyApp : App {
   Tube tube;
   Sine oscillator;
   ControlGUI gui;
+  PresetHandler presetHandler{"AcousticTubePresets"};
+  PresetServer presetServer{"0.0.0.0", 9011};
 
   Parameter frequency{"/frequency", "", 48, "", 0, 127};
+  Parameter volume{"/volume", "", -60, "", -60, 0};
 
   void onCreate() override {
     gui.init();
     oscillator.frequency(100);
     tube.set(23);
 
+    // GUI setup
+    //
+    //
+    gui << presetHandler;
+    gui << volume;
     gui << frequency;
-    for (auto& v : vocal) gui << v;
+    for (auto& v : vocal)  //
+      gui << v;
+
+    presetHandler << volume;
+    presetHandler << frequency;
+    for (auto& v : vocal)  //
+      presetHandler << v;
+
+    presetHandler.setMorphTime(1.0);
+
+    parameterServer() << volume;
+    parameterServer() << frequency;
+    for (auto& v : vocal)  //
+      parameterServer() << v;
+
+    parameterServer().print();
   }
 
   void onAnimate(double dt) override {
@@ -175,6 +200,7 @@ struct MyApp : App {
     while (io()) {
       float s = oscillator() / 20;
       float f = tube(s > 0 ? s : 0) * 0.1;
+      f *= dbtoa(volume.get());
       io.out(0) = f;
       io.out(1) = f;
     }
