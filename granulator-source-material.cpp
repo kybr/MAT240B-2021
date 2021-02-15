@@ -262,6 +262,8 @@ struct MyApp : App {
 
   void onAnimate(double dt) override {
     navControl().active(!gui.usingInput());
+
+    // printf("%d %d\n", audioIO().isOpen(), audioIO().isRunning());
     //
   }
 

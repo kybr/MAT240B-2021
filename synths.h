@@ -327,11 +327,10 @@ struct Array : std::vector<float> {
   }
 
   // raw lookup
-  // except that i think "at" does bounds checking
   float raw(const float index) const {
     const unsigned i = floor(index);
     const float x0 = at(i);
-    const float x1 = at((i == (size() - 1)) ? 0 : i + 1);  // looping semantics
+    const float x1 = at(i >= size() ? 0 : i + 1);  // loop around
     const float t = index - i;
     return x1 * t + x0 * (1 - t);
   }
@@ -342,15 +341,18 @@ struct Array : std::vector<float> {
   // allow for sloppy indexing (e.g., negative, huge) by fixing the index to
   // within the bounds of the array
   float get(float index) const {
-    if (index < 0) index += size();
-    if (index > size()) index -= size();
-    return raw(index);  // defer to our method without bounds checking
+    float f = fmod(index, (float)size());
+    if (f < 0.0f) {
+      f += size();
+    }
+    return raw(index);
   }
   float operator[](const float index) const { return get(index); }
   float phasor(float index) const { return get(size() * index); }
 
   void add(const float index, const float value) {
     const unsigned i = floor(index);
+    // XXX i think this next bit is wrong!
     const unsigned j = (i == (size() - 1)) ? 0 : i + 1;  // looping semantics
     const float t = index - i;
     at(i) += value * (1 - t);
