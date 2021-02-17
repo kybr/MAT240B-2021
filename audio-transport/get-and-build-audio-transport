@@ -1,0 +1,11 @@
+#!/bin/sh
+
+git clone https://github.com/sportdeath/audio_transport audio-transport
+mkdir -p audio-transport/build
+pushd audio-transport/build
+cmake ..
+cmake --build .
+popd
+cp audio-transport/build/libaudio_transport.dylib .
+cp -r audio-transport/include/audio_transport .
+rm -rf audio-transport
