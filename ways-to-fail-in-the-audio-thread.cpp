@@ -69,50 +69,57 @@ struct MyApp : App {
   }
 
   void onSound(AudioIOData& io) override {
-    int i = active.get() + 1;
-    if (i >= 1000) {
-      i = 0;
-    }
-    active.set(i);
+    try {
+      int i = active.get() + 1;
+      if (i >= 1000) {
+        i = 0;
+      }
+      active.set(i);
 
-    while (io()) {
-      float f = tri(phasor()) * 0.1;
-      value.set(f);
-      io.out(0) = f;
-      io.out(1) = f;
+      while (io()) {
+        float f = tri(phasor()) * 0.1;
+        value.set(f);
+        io.out(0) = f;
+        io.out(1) = f;
 
-      // ways to fail
-      //
-      //
+        // ways to fail
+        //
+        //
 
-      if (shouldSpin) {
-        // do nothing useful, really fast
-        while (true)
-          ;
+        if (shouldSpin) {
+          // do nothing useful, really fast
+          while (true)
+            ;
+        }
+
+        if (shouldPrompt) {
+          getchar();  // wait for user to type something
+        }
+
+        if (shouldStop) {
+          audioIO().stop();
+        }
+
+        if (shouldClose) {
+          audioIO().close();
+        }
+
+        if (shouldThrow) {
+          shouldThrow = false;
+          throw std::out_of_range("EXCEPTION!!!");
+          // at(0) on an empty std:vector<float> we get an std::out_of_range
+        }
+
+        if (shouldMemory) {
+          shouldMemory = false;
+          float* memory = new float[1e10];
+          memory[0] = 1;
+          delete[] memory;
+        }
       }
 
-      if (shouldPrompt) {
-        getchar();  // wait for user to type something
-      }
-
-      if (shouldStop) {
-        audioIO().stop();
-      }
-
-      if (shouldClose) {
-        audioIO().close();
-      }
-
-      if (shouldThrow) {
-        throw std::out_of_range("got here");
-      }
-
-      if (shouldMemory) {
-        shouldMemory = false;
-        float* memory = new float[1e10];
-        memory[0] = 1;
-        delete[] memory;
-      }
+    } catch (...) {
+      printf("got here\n");
     }
   }
 

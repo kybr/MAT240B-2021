@@ -94,8 +94,10 @@ struct Phasor {
     // than 1 or less than -1 and phase will get away from us.
     //
     phase += increment;
-    if (phase > 1) phase -= 1;
-    if (phase < 0) phase += 1;
+    // must me >= 1.0 to stay on [0.0, 1.0)
+    if (phase >= 1.0) phase -= 1.0;
+    // must me < 0.0 to stay on [0.0, 1.0)
+    if (phase < 0) phase += 1.0;
     return phase;
   }
 };
@@ -234,7 +236,7 @@ class Biquad {
   }
 };
 
-struct Edge {
+struct Timer {
   float phase = 0.0;        // on the interval [0, 1)
   float increment = 0.001;  // led to an low F
 
@@ -251,6 +253,8 @@ struct Edge {
   }
 };
 
+[[deprecated("Use Timer instead.")]] typedef Timer Edge;
+
 struct OnePole {
   float b0 = 1, a1 = 0, yn1 = 0;
   void frequency(float hertz) {
@@ -261,7 +265,7 @@ struct OnePole {
   float operator()(float xn) { return yn1 = b0 * xn + a1 * yn1; }
 };
 
-struct Array : std::vector<float> {
+struct Buffer : std::vector<float> {
   int sampleRate{SAMPLE_RATE};
 
   void operator()(float f) {
@@ -329,8 +333,17 @@ struct Array : std::vector<float> {
   // raw lookup
   float raw(const float index) const {
     const unsigned i = floor(index);
-    const float x0 = at(i);
-    const float x1 = at(i >= size() ? 0 : i + 1);  // loop around
+    const unsigned j = i == (size() - 1) ? 0 : i + 1;
+    // const unsigned j = (i + 1) % size(); // is this faster or slower than the
+    // line above?
+#if 0
+    const float x0 = std::vector<float>::operator[](i);
+    const float x1 =
+        std::vector<float>::operator[](i >= size() ? 0 : i + 1);  // loop around
+#else
+    const float x0 = at(i);  // at() may throw std::out_of_range exception
+    const float x1 = at(j);  // loop around
+#endif
     const float t = index - i;
     return x1 * t + x0 * (1 - t);
   }
@@ -345,6 +358,7 @@ struct Array : std::vector<float> {
     if (f < 0.0f) {
       f += size();
     }
+    // if (f == -0.0) f = 0.0;
     return raw(index);
   }
   float operator[](const float index) const { return get(index); }
@@ -359,6 +373,8 @@ struct Array : std::vector<float> {
     at(j) += value * t;
   }
 };
+
+[[deprecated("Use Buffer instead.")]] typedef Buffer Array;
 
 struct FloatPair {
   float left, right;
@@ -430,8 +446,8 @@ struct StereoArray : std::vector<FloatPair> {
 */
 
 float sine(float phase) {
-  struct SineArray : Array {
-    SineArray() {
+  struct SineBuffer : Buffer {
+    SineBuffer() {
       resize(10000);
       const float pi2 = M_PI * 2;
       for (unsigned i = 0; i < size(); ++i)  //
@@ -443,7 +459,7 @@ float sine(float phase) {
     }
   };
 
-  static SineArray instance;
+  static SineBuffer instance;
   return instance(phase);
 }
 
@@ -454,7 +470,7 @@ struct Sine : Phasor {
 // This is a low-level structure for saving a sequence of samples. It offers
 // separate read/write operations.
 //
-struct DelayLine : Array {
+struct DelayLine : Buffer {
   unsigned next{0};
 
   DelayLine(float capacity = 1 /* seconds */) {
@@ -712,7 +728,7 @@ struct ADSR {
   }
 };
 
-struct Table : Phasor, Array {
+struct Table : Phasor, Buffer {
   Table(unsigned size = 4096) { resize(size); }
 
   virtual float operator()() {
@@ -723,7 +739,7 @@ struct Table : Phasor, Array {
   }
 };
 
-struct SoundPlayer : Phasor, Array {
+struct SoundPlayer : Phasor, Buffer {
   void rate(float ratio) { period((size() / sampleRate) / ratio); }
 
   virtual float operator()() {
@@ -735,8 +751,8 @@ struct SoundPlayer : Phasor, Array {
 };
 
 float noise(float phase) {
-  struct NoiseArray : Array {
-    NoiseArray() {
+  struct NoiseBuffer : Buffer {
+    NoiseBuffer() {
       resize(20 * 44100);
       for (unsigned i = 0; i < size(); ++i)  //
         at(i) = al::rnd::uniformS();
@@ -747,12 +763,12 @@ float noise(float phase) {
     }
   };
 
-  static NoiseArray instance;
+  static NoiseBuffer instance;
   return instance(phase);
 }
 
 float normal(float phase) {
-  struct NormalDistribution : Array {
+  struct NormalDistribution : Buffer {
     NormalDistribution() {
       resize(20 * 44100);
       for (unsigned i = 0; i < size(); ++i)  //

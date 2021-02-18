@@ -273,23 +273,28 @@ struct MyApp : App {
   }
 
   void onSound(AudioIOData& io) override {
-    active.set(granulator.manager.activeGrainCount());
+    try {
+      active.set(granulator.manager.activeGrainCount());
 
-    while (io()) {
-      diy::FloatPair p = granulator();
+      while (io()) {
+        diy::FloatPair p = granulator();
 
-      if (bad(p.left)) {
-        printf("p.left is %s\n", show_classification(p.left));
+        if (bad(p.left)) {
+          printf("p.left is %s\n", show_classification(p.left));
+        }
+
+        if (bad(p.right)) {
+          printf("p.right is %s\n", show_classification(p.right));
+        }
+
+        value.set(p.left);
+
+        io.out(0) = p.left;
+        io.out(1) = p.right;
       }
 
-      if (bad(p.right)) {
-        printf("p.right is %s\n", show_classification(p.right));
-      }
-
-      value.set(p.left);
-
-      io.out(0) = p.left;
-      io.out(1) = p.right;
+    } catch (const std::out_of_range& e) {
+      std::cerr << "Out of Range error: " << e.what() << '\n';
     }
   }
 };
