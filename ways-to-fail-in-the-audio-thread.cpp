@@ -1,3 +1,35 @@
+// Karl Yerkes / 2021-02-18 / MAT240B
+//
+// Ways to fail in the audio thread
+//
+// This example does several of the things we generally don't want to do in the
+// context of an audio thread.
+//
+// See
+// http://www.rossbencina.com/code/real-time-audio-programming-101-time-waits-for-nothing
+//
+// - Don’t allocate or deallocate memory
+// - Don’t lock a mutex
+// - Don’t read or write to the filesystem or otherwise perform i/o. (In case
+// there’s any doubt, this includes things like calling printf or NSLog, or GUI
+// APIs.)
+// - Don’t call OS functions that may block waiting for something
+// - Don’t execute any code that has unpredictable or poor worst-case timing
+// behavior
+// - Don’t call any code that does or may do any of the above
+// - Don’t call any code that you don’t trust to follow these rules
+// - On Apple operating systems follow Apple’s guidelines
+//
+// - Do use algorithms with good worst-case time complexity (ideally O(1)
+// wost-case)
+// - Do amortize computation across many audio samples to smooth out CPU usage
+// rather than using “bursty” algorithms that occasionally have long processing
+// times
+// - Do pre-allocate or pre-compute data in a non-time-critical thread
+// - Do employ non-shared, audio-callback-only data structures so you don’t need
+// to think about sharing, concurrency and locks
+//
+
 #include "al/app/al_App.hpp"
 #include "al/ui/al_ControlGUI.hpp"
 #include "al/ui/al_Parameter.hpp"
@@ -17,6 +49,7 @@ struct MyApp : App {
   bool shouldStop{false};
   bool shouldClose{false};
   bool shouldThrow{false};
+  bool shouldMemory{false};
 
   void onCreate() override {
     phasor.frequency(220);
@@ -73,6 +106,13 @@ struct MyApp : App {
       if (shouldThrow) {
         throw std::out_of_range("got here");
       }
+
+      if (shouldMemory) {
+        shouldMemory = false;
+        float* memory = new float[1e10];
+        memory[0] = 1;
+        delete[] memory;
+      }
     }
   }
 
@@ -96,6 +136,10 @@ struct MyApp : App {
 
       case 'w':
         shouldThrow = true;
+        break;
+
+      case 'm':
+        shouldMemory = true;
         break;
 
       default:
