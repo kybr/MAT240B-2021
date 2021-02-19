@@ -98,6 +98,7 @@ struct Phasor {
     if (phase >= 1.0) phase -= 1.0;
     // must me < 0.0 to stay on [0.0, 1.0)
     if (phase < 0) phase += 1.0;
+    // XXX should we use fmod instead?
     return phase;
   }
 };
@@ -274,33 +275,26 @@ struct Buffer : std::vector<float> {
   }
   void save(const std::string& fileName) const { save(fileName.c_str()); }
   void save(const char* fileName) const {
-    std::cerr << "FIXME" << std::endl;
-    exit(1);
-    /*
     drwav_data_format format;
-    format.channels = 1;
     format.container = drwav_container_riff;
     format.format = DR_WAVE_FORMAT_IEEE_FLOAT;
+    format.channels = 1;
     format.sampleRate = sampleRate;
     format.bitsPerSample = 32;
-    drwav* pWav = drwav_open_file_write(fileName, &format);
-    if (pWav == nullptr) {
-      std::cerr << "failed to write " << fileName << std::endl;
-      drwav_close(pWav);
+
+    drwav wav;
+    if (!drwav_init_file_write(&wav, fileName, &format, nullptr)) {
+      std::cerr << "filed to init file " << fileName << std::endl;
       return;
     }
-    drwav_uint64 samplesWritten = drwav_write(pWav, size(), data());
-    if (samplesWritten != size()) {
+    drwav_uint64 framesWritten = drwav_write_pcm_frames(&wav, size(), data());
+    if (framesWritten != size()) {
       std::cerr << "failed to write all samples to " << fileName << std::endl;
-      drwav_close(pWav);
-      return;
     }
-    drwav_close(pWav);
-    */
+    drwav_uninit(&wav);
   }
 
   bool load(const std::string& fileName) { return load(fileName.c_str()); }
-
   bool load(const char* filePath) {
     unsigned int channels;
     unsigned int sampleRate;
@@ -336,10 +330,9 @@ struct Buffer : std::vector<float> {
     const unsigned j = i == (size() - 1) ? 0 : i + 1;
     // const unsigned j = (i + 1) % size(); // is this faster or slower than the
     // line above?
-#if 0
+#if 1
     const float x0 = std::vector<float>::operator[](i);
-    const float x1 =
-        std::vector<float>::operator[](i >= size() ? 0 : i + 1);  // loop around
+    const float x1 = std::vector<float>::operator[](j);  // loop around
 #else
     const float x0 = at(i);  // at() may throw std::out_of_range exception
     const float x1 = at(j);  // loop around

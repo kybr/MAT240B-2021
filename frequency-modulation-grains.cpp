@@ -1,5 +1,11 @@
+// Karl Yerkes / 2021-02-18 / MAT240B
+//
+// Frequency Modulation Granular Synthesizer
+//
+//
+
 #include "al/app/al_App.hpp"
-#include "al/math/al_Random.hpp"
+#include "al/math/al_Functions.hpp"  // al::clip
 #include "al/ui/al_ControlGUI.hpp"
 #include "al/ui/al_Parameter.hpp"
 using namespace al;
@@ -7,13 +13,9 @@ using namespace al;
 #include "synths.h"
 using namespace diy;
 
-#include <iostream>
-#include <stdexcept>
-
 // FrequencyModulationGrain
 //
-//
-struct FrequencyModulationGrain {
+struct FrequencyModulationGrain : SynthVoice {
   Sine carrier;
   Sine modulator;
   Line alpha;
@@ -29,6 +31,21 @@ struct FrequencyModulationGrain {
     float p = pan();
     float v = envelope() * carrier();
     return {(1.0f - p) * v, p * v};
+  }
+
+  void onProcess(AudioIOData& io) override {
+    while (io()) {
+      diy::FloatPair pair = operator()();
+      // Always remember to add to the audio output!!
+      // Otherwise you will be overwriting everyone else!!
+      io.out(0) += pair.left;
+      io.out(1) += pair.right;
+
+      if (envelope.decay.done()) {
+        free();
+        break;
+      }
+    }
   }
 
   //
@@ -53,19 +70,16 @@ struct MyApp : App {
   Parameter volume{"/volume", "", -90, "", -90, 0};
 
   diy::Timer timer;
-
-  FrequencyModulationGrain g;
-
-  MyApp() {
-    g.configure(0.5, 0.9, 0.1, 60.0, 63.0, 3.0, 7.0, 0.0, 10.0, 0.0, 1.0);
-    timer.period(0.8);
-    //
-  }
+  diy::Buffer recorder;
+  PolySynth polySynth;
 
   void onCreate() override {
+    polySynth.allocatePolyphony<FrequencyModulationGrain>(2000);
+    timer.period(0.2);
     gui.init();
     gui << volume;
   }
+  void onExit() override { recorder.save("fm-grains.wav"); }
 
   void onAnimate(double dt) override {
     navControl().active(!gui.usingInput());
@@ -78,22 +92,41 @@ struct MyApp : App {
   }
 
   void onSound(AudioIOData& io) override {
-    try {
-      while (io()) {
-        if (timer()) {
-          g.configure(0.5, 0.9, 0.1, rnd::uniform(90.0, 30.0),
-                      rnd::normal() * 5 + 60, rnd::uniform(10, -10), 7.0,
-                      rnd::uniform(100), rnd::normal() * 10 + 30,
-                      rnd::uniform(), rnd::uniform());
-        }
+    // render all active synth voices (grains) into the output buffer
+    //
+    polySynth.render(io);
 
-        diy::FloatPair p = g();
-        float gain = dbtoa(volume.get());
-        io.out(0) = p.left * gain;
-        io.out(1) = p.right * gain;
+    // reset the frame so we can go over the frame again below
+    //
+    io.frame(0);
+
+    // trigger new voices on the timer and apply global volume
+    //
+    while (io()) {
+      if (timer()) {
+        auto* voice = polySynth.getVoice<FrequencyModulationGrain>();
+
+        float dur = clip(rnd::normal() / 10 + 0.2, 1.0, 0.01);
+        float gain = 0.9;
+        float attack = clip(rnd::uniform(0.5, 0.1));
+        float c0 = rnd::uniform(127.0f);
+        float c1 = clip(rnd::normal() * 5 + 60, 127.0f);
+        float m0 = rnd::uniform(127.0f);
+        float m1 = 7;
+        float i0 = rnd::uniform(100);
+        float i1 = rnd::normal() * 10 + 30;
+        float p0 = rnd::uniform();
+        float p1 = rnd::uniform();
+        voice->configure(dur, gain, attack, c0, c1, m0, m1, i0, i1, p0, p1);
+
+        polySynth.triggerOn(voice);
       }
-    } catch (const std::exception& e) {
-      std::cout << "Exception Thrown! " << e.what() << std::endl;
+
+      float gain = dbtoa(volume.get());
+      io.out(0) *= gain;
+      io.out(1) *= gain;
+
+      recorder(0.5f * (io.out(0) + io.out(1)));
     }
   }
 };
@@ -102,19 +135,4 @@ int main() {
   MyApp app;
   app.configureAudio(48000, 1024, 2);
   app.start();
-
-  /*
-     diy::Timer timer;
-  timer.period(0.8);
-  FrequencyModulationGrain g;
-
-  while (true) {
-    if (timer()) {
-      g.configure(0.5, 0.9, 0.1, rnd::uniform(90.0, 30.0),
-                  rnd::normal() * 5 + 60, rnd::uniform(10, -10), 7.0,
-                  rnd::uniform(100), rnd::normal() * 10 + 30);
-    }
-    float f = g();
-  }
-  */
 }
