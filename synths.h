@@ -662,6 +662,43 @@ struct Line {
   }
 };
 
+struct ExpSeg {
+  // WARNING:
+  // - value > 0 and target > 0
+  // - precision error, especially on long segments
+  double value = 0, target = 0, seconds = 1 / SAMPLE_RATE, rate = 1;
+
+  void set() {
+    rate = pow(2.0, log2(target / value) / (seconds * SAMPLE_RATE));
+  }
+  void set(double v, double t, double s) {
+    value = v;
+    target = t;
+    seconds = s;
+    set();
+  }
+  void set(double t, double s) {
+    target = t;
+    seconds = s;
+    set();
+  }
+  void set(double t) {
+    target = t;
+    set();
+  }
+
+  bool done() { return value == target; }
+
+  float operator()() {
+    float v = value;
+    if (value != target) {
+      value *= rate;
+      if ((rate < 1) ? (value < target) : (value > target)) value = target;
+    }
+    return v;
+  }
+};
+
 struct AttackDecay {
   Line attack, decay;
 
