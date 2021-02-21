@@ -83,6 +83,7 @@ struct Phasor {
   }
   void period(float seconds) { frequency(1 / seconds); }
   float frequency() const { return SAMPLE_RATE * increment; }
+  void zero() { phase = increment = 0; }
 
   // add some Hertz to the current frequency
   //
@@ -94,11 +95,17 @@ struct Phasor {
     // than 1 or less than -1 and phase will get away from us.
     //
     phase += increment;
+#if 0
     // must me >= 1.0 to stay on [0.0, 1.0)
     if (phase >= 1.0) phase -= 1.0;
     // must me < 0.0 to stay on [0.0, 1.0)
     if (phase < 0) phase += 1.0;
-    // XXX should we use fmod instead?
+#else
+    // XXX should we use fmod instead? frequencies outside of the norm
+    // (-SAMPLE_RATE, SAMPLE_RATE)? might put phase outside [0, 1.0) unless we
+    // use fmod.
+    phase = fmod(phase, 1.0f);
+#endif
     return phase;
   }
 };
@@ -326,8 +333,13 @@ struct Buffer : std::vector<float> {
 
   // raw lookup
   float raw(const float index) const {
-    const unsigned i = floor(index);
-    const unsigned j = i == (size() - 1) ? 0 : i + 1;
+    // XXX don't use unsigned unless you really need to. See
+    // https://jacobegner.blogspot.com/2019/11/unsigned-integers-are-dangerous.html
+    // Using unsigned indicies here will fail when we do FM using a table-based
+    // sine. (?questionable?) Furthermore, we need large ints to prevent
+    // overflow which also happens when doing FM.
+    const int i = floor(index);
+    const int j = i == (size() - 1) ? 0 : i + 1;
     // const unsigned j = (i + 1) % size(); // is this faster or slower than the
     // line above?
 #if 1
@@ -347,11 +359,10 @@ struct Buffer : std::vector<float> {
   // allow for sloppy indexing (e.g., negative, huge) by fixing the index to
   // within the bounds of the array
   float get(float index) const {
-    float f = fmod(index, (float)size());
-    if (f < 0.0f) {
-      f += size();
+    index = fmod(index, (float)size());
+    if (index < 0.0f) {
+      index += size();
     }
-    // if (f == -0.0) f = 0.0;
     return raw(index);
   }
   float operator[](const float index) const { return get(index); }
@@ -441,15 +452,11 @@ struct StereoArray : std::vector<FloatPair> {
 float sine(float phase) {
   struct SineBuffer : Buffer {
     SineBuffer() {
-      resize(10000);
-      const float pi2 = M_PI * 2;
+      resize(100000);
       for (unsigned i = 0; i < size(); ++i)  //
-        at(i) = sinf(i * pi2 / size());
+        at(i) = sin(i * M_PI * 2 / size());
     }
-    float operator()(float phase) {
-      //
-      return phasor(phase);
-    }
+    float operator()(float phase) { return phasor(phase); }
   };
 
   static SineBuffer instance;
@@ -663,6 +670,15 @@ struct Line {
 };
 
 struct ExpSeg {
+  Line line;
+  void set(double v, double t, double s) { line.set(log2(v), log2(t), s); }
+  void set(double t, double s) { line.set(log2(t), s); }
+  void set(double t) { line.set(log2(t)); }
+  float operator()() { return pow(2.0f, line()); }
+};
+
+/*
+struct ExpSeg {
   // WARNING:
   // - value > 0 and target > 0
   // - precision error, especially on long segments
@@ -698,6 +714,7 @@ struct ExpSeg {
     return v;
   }
 };
+*/
 
 struct AttackDecay {
   Line attack, decay;
