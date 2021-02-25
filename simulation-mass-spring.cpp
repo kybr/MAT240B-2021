@@ -8,7 +8,7 @@ using namespace al;
 using namespace diy;
 
 // https://en.wikipedia.org/wiki/Harmonic_oscillator
-struct System {
+struct System : PlaybackRateObserver {
   // this the whole state of the simulation
   //
   float position{0};
@@ -55,9 +55,9 @@ struct System {
   void recalculate() {
     // sample rate is "baked into" these constants to save on per-sample
     // operations.
-    dampingCoefficient = 2 / (_decayTime * SAMPLE_RATE);
-    springConstant = pow(_frequency * M_2PI / SAMPLE_RATE, 2) +
-                     1 / pow(_decayTime * SAMPLE_RATE, 2);
+    dampingCoefficient = 2 / (_decayTime * playbackRate);
+    springConstant = pow(_frequency * M_2PI / playbackRate, 2) +
+                     1 / pow(_decayTime * playbackRate, 2);
   }
 
   // we keep these around so that we can set each independently
@@ -91,6 +91,7 @@ struct MyApp : App {
     a.trigger();
     edge.period(1);
     //
+    diy::setPlaybackRate(48000);
   }
 
   Array recording;

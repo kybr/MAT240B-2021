@@ -19,6 +19,10 @@
 
 namespace diy {
 
+// NOTES
+// XXX don't use unsigned unless you really need to. See
+// https://jacobegner.blogspot.com/2019/11/unsigned-integers-are-dangerous.html
+
 // xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 // xx GLOBALS
 // xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -27,6 +31,82 @@ const int SAMPLE_RATE = 48000;  // 44100;
 const int BLOCK_SIZE = 512;
 const int OUTPUT_CHANNELS = 2;
 const int INPUT_CHANNELS = 2;
+
+// How do UGens learn the sample rate?
+//
+// Lots of UGens need to know the sample rate, which might/could change from
+// time to time. How do we let this UGens know what the sample rate is? We make
+// each of them inherit from a class that "listens" for changes. How? The base
+// class, in its constructor, puts itself on a global list of listeners. We
+// set/change the sample rate by telling it to the global list, which in turn
+// notifies each of the listeners.
+//
+// See Publish/Subscribe or Observer pattern
+//
+
+#define DEFAULT_PLAYBACK_RATE (48000)
+
+// "Observer" class forward declaration
+//
+struct PlaybackRateObserver {
+  double playbackRate{DEFAULT_PLAYBACK_RATE};
+  PlaybackRateObserver* nextObserver{nullptr};
+  virtual void onPlaybackRateChange(double playbackRate);
+  PlaybackRateObserver();
+  // virtual ~PlaybackRateObserver();
+};
+
+// "Subject" class forward declaration
+//
+class PlaybackRateSubject {
+  double playbackRate{DEFAULT_PLAYBACK_RATE};
+  PlaybackRateObserver* list{nullptr};
+
+  PlaybackRateSubject() {}
+
+ public:
+  PlaybackRateSubject(PlaybackRateSubject const&) = delete;
+  void operator=(PlaybackRateSubject const&) = delete;
+
+  void notifyObservers(double playbackRate);
+  void addObserver(PlaybackRateObserver* observer);
+  static PlaybackRateSubject& instance();
+};
+
+// The one and only way to get an instance of PlaybackRateSubject
+PlaybackRateSubject& PlaybackRateSubject::instance() {
+  static PlaybackRateSubject instance;
+  return instance;
+}
+
+// convenience function for setting playback rate
+void setPlaybackRate(double playbackRate) {
+  PlaybackRateSubject::instance().notifyObservers(playbackRate);
+}
+
+// the default action for PlaybackRateObserver
+void PlaybackRateObserver::onPlaybackRateChange(double playbackRate) {
+  this->playbackRate = playbackRate;
+}
+
+// When a PlaybackRateObserver is born, it adds itself to the list of observers
+PlaybackRateObserver::PlaybackRateObserver() {
+  PlaybackRateSubject::instance().addObserver(this);
+}
+
+void PlaybackRateSubject::notifyObservers(double playbackRate) {
+  if (playbackRate != this->playbackRate) {
+    for (auto* o = list; o != nullptr; o = o->nextObserver) {
+      o->onPlaybackRateChange(playbackRate);
+    }
+  }
+}
+
+void PlaybackRateSubject::addObserver(PlaybackRateObserver* observer) {
+  // this is an add-to-front operation on a linked list!
+  observer->nextObserver = list;
+  list = observer;
+};
 
 // xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 // xx HELPER FUNCTIONS
@@ -44,6 +124,27 @@ inline float ftom(float f) { return 12.0f * log2f(f / 8.175799f); }
 inline float dbtoa(float db) { return 1.0f * powf(10.0f, db / 20.0f); }
 inline float atodb(float a) { return 20.0f * log10f(a / 1.0f); }
 inline float sigmoid(float x) { return 2.0f / (1.0f + expf(-x)) - 1.0f; }
+
+template <typename F>
+inline F wrap(F value, F high = 1, F low = 0) {
+  assert(high > low);
+  if (value >= high) {
+    F range = high - low;
+    value -= range;
+    if (value >= high) {
+      // less common case; must use division
+      value -= (F)(unsigned)((value - low) / range);
+    }
+  } else if (value < low) {
+    F range = high - low;
+    value += range;
+    if (value < low) {
+      // less common case; must use division
+      value += (F)(unsigned)((high - value) / range);
+    }
+  }
+  return value;
+}
 
 float saw(float phase) { return phase * 2 - 1; }
 float rect(float phase) { return phase < 0.5 ? -1 : 1; }
@@ -72,46 +173,37 @@ struct BlockTimer {
 
 // this will get used all over the place
 //
-struct Phasor {
-  float phase{0};      // on the interval [0, 1)
-  float increment{0};  // led to an low F
+struct Phasor : PlaybackRateObserver {
+  float value{0};
+  float increment{0};
 
-  void frequency(float hertz) {
-    // this function may run per-sample. all this stuff costs performance
-    // assert(hertz < SAMPLE_RATE && hertz > -SAMPLE_RATE);
-    increment = hertz / SAMPLE_RATE;
-  }
-  void period(float seconds) { frequency(1 / seconds); }
-  float frequency() const { return SAMPLE_RATE * increment; }
-  void zero() { phase = increment = 0; }
+  void frequency(float hertz) { increment = hertz / playbackRate; }
+  void modulate(float hertz) { increment += hertz / playbackRate; }
+  void period(float seconds) { frequency(1.0f / seconds); }
+  float frequency() const { return increment * playbackRate; }
+  void zero() { value = increment = 0.0f; }
 
-  // add some Hertz to the current frequency
+  // we assume this method called once per sample to produce a upward ramp
+  // waveform strictly on the interval [0.0, 1.0).
   //
-  void modulate(float hertz) { increment += hertz / SAMPLE_RATE; }
-
   float operator()() {
-    // increment and wrap phase; this only works correctly for frequencies in
-    // (-SAMPLE_RATE, SAMPLE_RATE) because otherwise increment will be greater
-    // than 1 or less than -1 and phase will get away from us.
-    //
-    phase += increment;
-#if 0
-    // must me >= 1.0 to stay on [0.0, 1.0)
-    if (phase >= 1.0) phase -= 1.0;
-    // must me < 0.0 to stay on [0.0, 1.0)
-    if (phase < 0) phase += 1.0;
-#else
-    // XXX should we use fmod instead? frequencies outside of the norm
-    // (-SAMPLE_RATE, SAMPLE_RATE)? might put phase outside [0, 1.0) unless we
-    // use fmod.
-    phase = fmod(phase, 1.0f);
-#endif
-    return phase;
+    float v = value;  // we return the current value
+
+    // side effect; compute the new value for use next time
+    value += increment;
+    value = wrap(value);
+
+    return v;
   }
 };
 
-// the partials roll off very quickly when compared to naiive Saw and Square; do
-// we really need a band-limited triangle? Meh.
+// for the eventual name change....
+//
+// [[deprecated("Use Ramp instead.")]] typedef Timer Phasor;
+//
+
+// the partials roll off very quickly when compared to naiive Saw and
+// Square; do we really need a band-limited triangle? Meh.
 struct Tri : Phasor {
   float operator()() { return tri(Phasor::operator()()); }
 };
@@ -139,7 +231,7 @@ struct History {
   }
 };
 
-class Biquad {
+class Biquad : PlaybackRateObserver {
   // Audio EQ Cookbook
   // http://www.musicdsp.org/files/Audio-EQ-Cookbook.txt
 
@@ -179,7 +271,7 @@ class Biquad {
   }
 
   void lpf(float f0, float Q) {
-    float w0 = 2 * M_PI * f0 / SAMPLE_RATE;
+    float w0 = 2 * M_PI * f0 / playbackRate;
     float alpha = sin(w0) / (2 * Q);
     b0 = (1 - cos(w0)) / 2;
     b1 = 1 - cos(w0);
@@ -192,7 +284,7 @@ class Biquad {
   }
 
   void hpf(float f0, float Q) {
-    float w0 = 2 * M_PI * f0 / SAMPLE_RATE;
+    float w0 = 2 * M_PI * f0 / playbackRate;
     float alpha = sin(w0) / (2 * Q);
     b0 = (1 + cos(w0)) / 2;
     b1 = -(1 + cos(w0));
@@ -205,7 +297,7 @@ class Biquad {
   }
 
   void bpf(float f0, float Q) {
-    float w0 = 2 * M_PI * f0 / SAMPLE_RATE;
+    float w0 = 2 * M_PI * f0 / playbackRate;
     float alpha = sin(w0) / (2 * Q);
     b0 = Q * alpha;
     b1 = 0;
@@ -218,7 +310,7 @@ class Biquad {
   }
 
   void notch(float f0, float Q) {
-    float w0 = 2 * M_PI * f0 / SAMPLE_RATE;
+    float w0 = 2 * M_PI * f0 / playbackRate;
     float alpha = sin(w0) / (2 * Q);
     b0 = 1;
     b1 = -2 * cos(w0);
@@ -231,7 +323,7 @@ class Biquad {
   }
 
   void apf(float f0, float Q) {
-    float w0 = 2 * M_PI * f0 / SAMPLE_RATE;
+    float w0 = 2 * M_PI * f0 / playbackRate;
     float alpha = sin(w0) / (2 * Q);
     b0 = 1 - alpha;
     b1 = -2 * cos(w0);
@@ -244,11 +336,11 @@ class Biquad {
   }
 };
 
-struct Timer {
+struct Timer : PlaybackRateObserver {
   float phase = 0.0;        // on the interval [0, 1)
   float increment = 0.001;  // led to an low F
 
-  void frequency(float hertz) { increment = hertz / SAMPLE_RATE; }
+  void frequency(float hertz) { increment = hertz / playbackRate; }
   void period(float seconds) { frequency(1 / seconds); }
 
   bool operator()() {
@@ -263,10 +355,10 @@ struct Timer {
 
 [[deprecated("Use Timer instead.")]] typedef Timer Edge;
 
-struct OnePole {
+struct OnePole : PlaybackRateObserver {
   float b0 = 1, a1 = 0, yn1 = 0;
   void frequency(float hertz) {
-    a1 = exp(-2.0f * 3.14159265358979323846f * hertz / SAMPLE_RATE);
+    a1 = exp(-2.0f * 3.14159265358979323846f * hertz / playbackRate);
     b0 = 1.0f - a1;
   }
   void period(float seconds) { frequency(1 / seconds); }
@@ -331,50 +423,41 @@ struct Buffer : std::vector<float> {
     return true;
   }
 
-  // raw lookup
-  float raw(const float index) const {
-    // XXX don't use unsigned unless you really need to. See
-    // https://jacobegner.blogspot.com/2019/11/unsigned-integers-are-dangerous.html
-    // Using unsigned indicies here will fail when we do FM using a table-based
-    // sine. (?questionable?) Furthermore, we need large ints to prevent
-    // overflow which also happens when doing FM.
-    const int i = floor(index);
+  float get(float index) const {
+    // correct indices that are out or range i.e., outside the interval [0.0,
+    // size) in such a way that the buffer data seems to repeat forever to the
+    // left and forever to the right.
+    //
+    index = wrap(index, (float)size());
+    assert(index >= 0.0f);
+    assert(index < size());
+
+    const int i =
+        floor(index);  // XXX modf would give us i and t; faster or slower?
     const int j = i == (size() - 1) ? 0 : i + 1;
-    // const unsigned j = (i + 1) % size(); // is this faster or slower than the
-    // line above?
-#if 1
+    // const unsigned j = (i + 1) % size();
+    // XXX is the ternary op (?:) faster or slower than the mod op (%) ?
+    assert(j < size());
+
     const float x0 = std::vector<float>::operator[](i);
     const float x1 = std::vector<float>::operator[](j);  // loop around
-#else
-    const float x0 = at(i);  // at() may throw std::out_of_range exception
-    const float x1 = at(j);  // loop around
-#endif
     const float t = index - i;
     return x1 * t + x0 * (1 - t);
   }
 
-  // void resize(unsigned n) { data.resize(n, 0); }
-  // float& operator[](unsigned index) { return data[index]; }
-
-  // allow for sloppy indexing (e.g., negative, huge) by fixing the index to
-  // within the bounds of the array
-  float get(float index) const {
-    index = fmod(index, (float)size());
-    if (index < 0.0f) {
-      index += size();
-    }
-    return raw(index);
-  }
   float operator[](const float index) const { return get(index); }
   float phasor(float index) const { return get(size() * index); }
 
-  void add(const float index, const float value) {
-    const unsigned i = floor(index);
-    // XXX i think this next bit is wrong!
-    const unsigned j = (i == (size() - 1)) ? 0 : i + 1;  // looping semantics
+  void add(float index, const float value) {
+    index = wrap(index, (float)size());
+    assert(index >= 0.0f);
+    assert(index < size());
+
+    const int i = floor(index);
+    const int j = (i == (size() - 1)) ? 0 : i + 1;
     const float t = index - i;
-    at(i) += value * (1 - t);
-    at(j) += value * t;
+    std::vector<float>::operator[](i) += value * (1 - t);
+    std::vector<float>::operator[](j) += value * t;
   }
 };
 
@@ -407,9 +490,8 @@ struct StereoArray : std::vector<FloatPair> {
     }
     drwav_uint64 samplesWritten = drwav_write(pWav, size(), data());
     if (samplesWritten != size()) {
-      std::cerr << "failed to write all samples to " << fileName << std::endl;
-      drwav_close(pWav);
-      return;
+      std::cerr << "failed to write all samples to " << fileName <<
+std::endl; drwav_close(pWav); return;
     }
     drwav_close(pWav);
   }
@@ -530,9 +612,9 @@ struct DelayModulation {
   }
 };
 
-// This is a simple echo effect. On each call, you give it some input and you
-// get some output from delayTime samples ago. If you want "multi-tap" or
-// separate read/write operations, use another object.
+// This is a simple echo effect. On each call, you give it some input and
+// you get some output from delayTime samples ago. If you want "multi-tap"
+// or separate read/write operations, use another object.
 //
 struct Echo : DelayLine {
   float delayTime{0};  // in samples, floating point
@@ -634,13 +716,12 @@ struct ShortTermPeak {
   }
 };
 
-struct Line {
-  float value = 0, target = 0, seconds = 1 / SAMPLE_RATE, increment = 0;
+struct Line : PlaybackRateObserver {
+  float value = 0, target = 0, seconds = 1, increment = 0;
 
   void set() {
-    if (seconds <= 0) seconds = 1 / SAMPLE_RATE;
     // slope per sample
-    increment = (target - value) / (seconds * SAMPLE_RATE);
+    increment = (target - value) / (seconds * playbackRate);
   }
   void set(float v, float t, float s) {
     value = v;
@@ -779,7 +860,7 @@ struct Table : Phasor, Buffer {
   Table(unsigned size = 4096) { resize(size); }
 
   virtual float operator()() {
-    const float index = phase * size();
+    const float index = value * size();
     const float v = get(index);
     Phasor::operator()();
     return v;
@@ -787,10 +868,10 @@ struct Table : Phasor, Buffer {
 };
 
 struct SoundPlayer : Phasor, Buffer {
-  void rate(float ratio) { period((size() / sampleRate) / ratio); }
+  void rate(float ratio) { period((size() / playbackRate) / ratio); }
 
   virtual float operator()() {
-    const float index = phase * size();
+    const float index = value * size();
     const float v = get(index);
     Phasor::operator()();
     return v;
@@ -846,7 +927,7 @@ struct MeanFilter {
   }
 };
 
-struct PluckedString : DelayLine {
+struct PluckedString : DelayLine, PlaybackRateObserver {
   MeanFilter filter;
 
   float gain{1};
@@ -872,12 +953,12 @@ struct PluckedString : DelayLine {
 
   // given t60 and frequency (seconds and Hertz), calculate the gain...
   //
-  // for a given frequency, our algorithm applies *gain* frequency-many times
-  // per second. given a t60 time we can calculate how many times (n) gain will
-  // be applied in those t60 seconds. we want to reduce the signal by 60dB over
-  // t60 seconds or over n-many applications. this means that we want gain to be
-  // a number that, when multiplied by itself n times, becomes 60 dB quieter
-  // than it began.
+  // for a given frequency, our algorithm applies *gain* frequency-many
+  // times per second. given a t60 time we can calculate how many times (n)
+  // gain will be applied in those t60 seconds. we want to reduce the signal
+  // by 60dB over t60 seconds or over n-many applications. this means that
+  // we want gain to be a number that, when multiplied by itself n times,
+  // becomes 60 dB quieter than it began.
   //
   void recalculate() {
     int n = t60 / delayTime;
@@ -893,9 +974,10 @@ struct PluckedString : DelayLine {
   }
 
   void pluck(float gain = 1) {
-    // put noise in the last N sample memory positions. N depends on frequency
+    // put noise in the last N sample memory positions. N depends on
+    // frequency
     //
-    int n = int(ceil(delayTime * SAMPLE_RATE));
+    int n = int(ceil(delayTime * playbackRate));
     for (int i = 0; i < n; ++i) {
       int index = next - i;
       if (index < 0)  //

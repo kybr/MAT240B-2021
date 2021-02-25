@@ -98,6 +98,10 @@ struct MyApp : App {
     gui << deviation1;
     gui << pan0;
     gui << pan1;
+
+    // call this after any diy-based entities are created.
+    //
+    diy::setPlaybackRate(48000);
   }
   void onExit() override { recorder.save("fm-grains.wav"); }
 
@@ -111,6 +115,8 @@ struct MyApp : App {
     gui.draw(g);
   }
 
+  float lastFrequency{0};
+
   void onSound(AudioIOData& io) override {
     // render all active synth voices (grains) into the output buffer
     //
@@ -123,7 +129,12 @@ struct MyApp : App {
     // trigger new voices on the timer and apply global volume
     //
     while (io()) {
-      timer.frequency(mtof(frequency.get()));
+      // frequency.hasChange() ???
+      if (lastFrequency != frequency.get()) {
+        lastFrequency = frequency.get();
+        timer.frequency(mtof(frequency.get()));
+      }
+
       if (timer()) {
         auto* voice = polySynth.getVoice<FrequencyModulationGrain>();
 
