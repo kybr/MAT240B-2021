@@ -1,8 +1,8 @@
 #!/bin/sh
 
-git clone https://github.com/mlabbe/nativefiledialog
+git clone https://github.com/kybr/nativefiledialog
 pushd nativefiledialog/build/gmake_macosx
 make
 popd
-mv nativefiledialog/build/lib/Release/x64/libnfd.a .
-mv nativefiledialog/src/include/nfd.h .
+cp nativefiledialog/build/lib/Release/x64/libnfd.a .
+cp nativefiledialog/src/include/nfd.h .
