@@ -10,7 +10,8 @@
 // Yet to be done:
 // - choose a better container for sequence
 //   + std::vector has high complexity for the find and erase operations
-// - add comments explaining use of std::mutex
+//   + std::forward_list / std::unordered_map ... std::map
+// - add comments explaining use of std::mutex (try_lock)
 // - encapsulate into Sequence class?
 // - use mtof rather than linear frequency mapping
 // - put the rate control on a parameter
@@ -237,6 +238,6 @@ struct MyApp : App {
 
 int main() {
   MyApp app;
-  app.configureAudio(44100, 512, 2, 0);
+  app.configureAudio(48000, 512, 2, 0);
   app.start();
 }
