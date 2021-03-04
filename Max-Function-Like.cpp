@@ -1,4 +1,3 @@
-// Karl Yerkes / 2021-03-01 / MAT240B
 // Karl Yerkes / 2021-03-02 / MAT240B
 //
 // Title: Max Function Like
@@ -177,6 +176,6 @@ struct MyApp : App {
 
 int main() {
   MyApp app;
-  app.configureAudio(44100, 512, 2, 0);
+  app.configureAudio(48000, 512, 2, 0);
   app.start();
 }
