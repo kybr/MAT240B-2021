@@ -20,13 +20,26 @@
 using namespace al;
 
 struct MyApp : App {
+  ControlGUI gui;
+  Parameter time{"/time", "", 0, "", 0, 100000};
+  Parameter value{"/value", "", 0, "", 0, 1};
+
   Mesh circle;
   Mesh line;
 
   std::vector<Vec3f> point;
   std::vector<bool> hover;
 
+  float evaluate(float pixel) {
+    //
+    //
+  }
+
   void onCreate() override {
+    gui.init();
+    gui << time;
+    gui << value;
+
     nav().pos(0, 0, 10);
     line.primitive(Mesh::LINE_STRIP);
 
@@ -59,6 +72,11 @@ struct MyApp : App {
     navControl().useMouse(false);
   }
 
+  void onAnimate(double dt) override {
+    navControl().active(!gui.usingInput());
+    //
+  }
+
   virtual void onDraw(Graphics& g) override {
     g.clear(0.27);
     g.camera(Viewpoint::ORTHO_FOR_2D);  // Ortho [0:width] x [0:height]
@@ -75,9 +93,13 @@ struct MyApp : App {
 
     g.color(1.0);
     g.draw(line);
+
+    gui.draw(g);
   }
 
   bool onMouseDrag(const Mouse& m) override {  //
+    if (gui.usingInput()) return false;
+
     Rayd r = getPickRay(m.x(), m.y());
 
     for (int i = 0; i < point.size(); i++) {
@@ -89,10 +111,13 @@ struct MyApp : App {
         break;  // only handle the first to intersect
       }
     }
-    return true;
+
+    return false;
   }
 
   bool onMouseDown(const Mouse& m) override {  //
+    if (gui.usingInput()) return false;
+
     Rayd r = getPickRay(m.x(), m.y());
 
     bool found = false;
@@ -111,27 +136,32 @@ struct MyApp : App {
       point.back().x = m.x();
       point.back().y = height() - m.y();
     }
-    return true;
+
+    return false;
   }
 
   bool onMouseUp(const Mouse& m) override {  //
+    if (gui.usingInput()) return false;
+
     sort(point.begin(), point.end(),
          [](const Vec3f& a, const Vec3f& b) { return a.x < b.x; });
     line.vertices().clear();
     for (int i = 0; i < point.size(); i++) {
       line.vertex(point[i]);
     }
-    return true;
+    return false;
   }
 
   bool onMouseMove(const Mouse& m) override {
+    if (gui.usingInput()) return false;
+
     Rayd r = getPickRay(m.x(), m.y());
 
     for (int i = 0; i < point.size(); i++) {
       float t = r.intersectSphere(point[i], 10);
       hover[i] = t > 0.f;
     }
-    return true;
+    return false;
   }
 
   void onSound(AudioIOData& io) override {
