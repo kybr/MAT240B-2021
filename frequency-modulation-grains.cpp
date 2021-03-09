@@ -197,6 +197,7 @@ struct MyApp : App {
 
 int main() {
   MyApp app;
-  app.configureAudio(48000, 1024, 2);
+  app.configureAudio(48000, 512, 2);
+  // app.configureAudio(48000, 768, 2);
   app.start();
 }

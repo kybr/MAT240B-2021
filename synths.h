@@ -545,6 +545,30 @@ float sine(float phase) {
   return instance(phase);
 }
 
+// Taylor Series expansion of sine on the interval [-1, 1). Using Horner's
+// method to minimize the number of operations.
+template <class F>
+inline F sine7(F x) {
+  F xx = x * x;
+  return x * (F(3.138982) +
+              xx * (F(-5.133625) + xx * (F(2.428288) - xx * F(0.433645))));
+}
+
+struct ModulatedSine : PlaybackRateObserver {
+  float value{0};
+  float increment{0};
+
+  void frequency(float hertz) { increment = hertz / playbackRate; }
+
+  float operator()(float modulation = 0.0f) {
+    float v = value;
+    // XXX is there a way to use different units for modulation to get rid of
+    // the divide in the expression below?
+    value = wrap(value + increment + modulation / playbackRate, -1.0, 1.0);
+    return sine7(v);
+  }
+};
+
 struct Sine : Phasor {
   float operator()() { return sine(Phasor::operator()()); }
 };
