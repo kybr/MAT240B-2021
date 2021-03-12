@@ -1,5 +1,7 @@
 #pragma once
 
+#include <limits>
+
 // inlcude this **after** MyApp
 // #inlcude "Function-From-Max.cpp"
 
@@ -30,10 +32,24 @@ Rayd FunctionFromMax::getPickRay(int screenX, int screenY) {
   return r;
 }
 
-float FunctionFromMax::evaluate(float pixel) {
+std::vector<al::Vec2f> FunctionFromMax::points() {
+  // find the 2D bounding box of the points already sorted by x
   //
-  //
-  return 0;
+  Vec2f lowerLeft(point.front().x, std::numeric_limits<float>::infinity());
+  Vec2f upperRight(point.back().x, -std::numeric_limits<float>::infinity());
+  for (auto p : point) {
+    if (p.y < lowerLeft.y) lowerLeft.y = p.y;
+    if (p.y > upperRight.y) upperRight.y = p.y;
+  }
+
+  std::vector<al::Vec2f> value;
+  for (auto p : point) {
+    value.push_back(
+        Vec2f(mapRange(p.x, lowerLeft.x, upperRight.x, 0.0f, 1.0f),
+              mapRange(p.y, lowerLeft.y, upperRight.y, 0.0f, 1.0f)));
+  }
+
+  return value;
 }
 
 void FunctionFromMax::onCreate() {

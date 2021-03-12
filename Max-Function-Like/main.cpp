@@ -76,6 +76,15 @@ struct MyApp : App {
 
   bool onMouseUp(const Mouse& m) override {
     functionFromMax.onMouseUp(m);
+
+    //
+    // Look here; This is how you access the normalized points
+    //
+    printf("\n========================================\n");
+    for (auto p : functionFromMax.points()) {
+      p.print();
+      printf("\n");
+    }
     return false;
   }
 

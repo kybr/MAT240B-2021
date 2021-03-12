@@ -21,7 +21,9 @@ class FunctionFromMax {
  public:
   FunctionFromMax(MyApp* that);
 
-  float evaluate(float pixel);
+  // set of pairs or (value,time) where time and value are normalized on (0, 1)
+  std::vector<al::Vec2f> points();
+
   void onCreate();
   void onDraw(Graphics& g);
   bool onMouseDrag(const Mouse& m);
